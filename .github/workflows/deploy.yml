@@ -29,11 +29,12 @@ jobs:
           source: "myapp"
           target: "/home/deployuser/app"
 
-      - name: Restart app
+      - name: Restart app and update openai_api_key
         uses: appleboy/ssh-action@v0.1.8
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            echo 'export OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> ~/.bashrc
             sudo systemctl restart myapp

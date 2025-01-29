@@ -1,58 +1,62 @@
 package main
 
 import (
+	"context"
+	"log"
 	"net/http"
-	"sync"
+	"os"
 
 	"github.com/gin-gonic/gin"
-)
-
-// Глобальные переменные и мьютекс
-var (
-	storedName string
-	mu         sync.Mutex
+	openai "github.com/sashabaranov/go-openai"
 )
 
 func main() {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		log.Fatal("Please enter a valide openai api key!")
+	}
+
+	client := openai.NewClient(apiKey)
+
 	r := gin.Default()
 
-	// POST /set-name - записываем имя
-	r.POST("/set-name", func(c *gin.Context) {
-		// Заберём имя из формы или JSON (зависит от Content-Type)
-		// Проще всего — из формы (PostForm).
-		name := c.PostForm("name")
-		if name == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "name is required",
-			})
-			return
-		}
-
-		// Запишем имя в глобальную переменную
-		mu.Lock()
-		storedName = name
-		mu.Unlock()
-
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Name set to " + name,
-		})
+	r.GET("/health", func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
 	})
 
-	// GET /hello - выводим приветствие
-	r.GET("/hello", func(c *gin.Context) {
-		mu.Lock()
-		name := storedName
-		mu.Unlock()
-
-		if name == "" {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "No name stored. Please set with /set-name first.",
+	r.GET("/gpt", func(c *gin.Context) {
+		question := c.Query("q")
+		if question == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Please provide a question via ?q=YourQuestion",
 			})
 			return
 		}
 
+		resp, err := client.CreateChatCompletion(
+			context.Background(),
+			openai.ChatCompletionRequest{
+				Model: openai.GPT4o20240513,
+				Messages: []openai.ChatCompletionMessage{
+					{
+						Role:    openai.ChatMessageRoleUser,
+						Content: question,
+					},
+				},
+			},
+		)
+
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": err.Error(),
+			})
+			return
+		}
+
+		answer := resp.Choices[0].Message.Content
 		c.JSON(http.StatusOK, gin.H{
-			"message": "Hello, " + name + "!",
+			"question": question,
+			"answer":   answer,
 		})
 	})
 
