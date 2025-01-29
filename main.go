@@ -36,7 +36,7 @@ func main() {
 		resp, err := client.CreateChatCompletion(
 			context.Background(),
 			openai.ChatCompletionRequest{
-				Model: openai.GPT4o20240513,
+				Model: openai.GPT4o,
 				Messages: []openai.ChatCompletionMessage{
 					{
 						Role:    openai.ChatMessageRoleUser,
