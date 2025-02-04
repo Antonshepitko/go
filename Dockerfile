@@ -1,5 +1,5 @@
 # Этап сборки: используем официальный образ Golang для компиляции приложения
-FROM golang:1.20-alpine AS builder
+FROM golang:1.23 AS builder
 WORKDIR /app
 # Копируем все файлы из текущей директории в контейнер
 COPY . .
