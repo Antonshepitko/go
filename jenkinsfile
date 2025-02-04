@@ -5,7 +5,7 @@ pipeline {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub') // ID в Jenkins для Docker Hub
         DOCKERHUB_REPO = "barongeddon/go" //Имя репозитория в Dockerhub
         REMOTE_SERVER = credentials('test-server-ip')  // Удаленный хост для разворачивания
-        REMOTE_SSH_CREDENTIALS = credentials('test-ssh') // ID в Jenkins для SSH подключения
+        REMOTE_SSH_CREDENTIALS = credentials('test_ssh') // ID в Jenkins для SSH подключения
     }
 
     stages {
