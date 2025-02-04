@@ -1,64 +1,23 @@
 package main
 
 import (
-	"context"
+	"fmt"
 	"log"
 	"net/http"
-	"os"
-
-	"github.com/gin-gonic/gin"
-	openai "github.com/sashabaranov/go-openai"
 )
 
+// Обработчик запроса по пути /health
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "ok")
+}
+
 func main() {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		log.Fatal("Please enter a valide openai api key!")
+	// Регистрируем обработчик для пути /health
+	http.HandleFunc("/health", healthHandler)
+	port := "8080"
+	log.Printf("Запуск сервиса на порту %s...\n", port)
+	// Запускаем сервер
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatalf("Ошибка запуска сервера: %v", err)
 	}
-
-	client := openai.NewClient(apiKey)
-
-	r := gin.Default()
-
-	r.GET("/health", func(c *gin.Context) {
-		c.String(http.StatusOK, "OK")
-	})
-
-	r.GET("/gpt", func(c *gin.Context) {
-		question := c.Query("q")
-		if question == "" {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Please provide a question via ?q=YourQuestion",
-			})
-			return
-		}
-
-		resp, err := client.CreateChatCompletion(
-			context.Background(),
-			openai.ChatCompletionRequest{
-				Model: openai.GPT4oMini,
-				Messages: []openai.ChatCompletionMessage{
-					{
-						Role:    openai.ChatMessageRoleUser,
-						Content: question,
-					},
-				},
-			},
-		)
-
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": err.Error(),
-			})
-			return
-		}
-
-		answer := resp.Choices[0].Message.Content
-		c.JSON(http.StatusOK, gin.H{
-			"question": question,
-			"answer":   answer,
-		})
-	})
-
-	r.Run(":8080")
 }
