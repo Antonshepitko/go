@@ -19,7 +19,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Собираем Docker-образ...'
-                sh "docker build -t ${DOCKERHUB_REPO}:latest ."
+                bat "docker build -t ${DOCKERHUB_REPO}:latest ."
             }
         }
         stage('Test Docker Container Locally') {
@@ -27,14 +27,14 @@ pipeline {
                 echo 'Запускаем временный контейнер для тестирования...'
                 script {
                     // Запускаем контейнер в фоновом режиме
-                    sh "docker run -d --name temp-container -p 8080:8080 ${DOCKERHUB_REPO}:latest"
+                    bat "docker run -d --name temp-container -p 8080:8080 ${DOCKERHUB_REPO}:latest"
                     // Ждем несколько секунд, чтобы контейнер запустился
                     sleep time: 5, unit: 'SECONDS'
                     // Выполняем тестовый запрос к healthcheck-эндпоинту
-                    sh "curl --fail http://localhost:8080/health"
+                    bat "curl --fail http://localhost:8080/health"
                     // Останавливаем и удаляем временный контейнер
-                    sh "docker stop temp-container"
-                    sh "docker rm temp-container"
+                    bat "docker stop temp-container"
+                    bat "docker rm temp-container"
                 }
             }
         }
@@ -42,11 +42,11 @@ pipeline {
             steps {
                 echo 'Публикуем образ в Docker Hub...'
                 script {
-                    sh """
+                    bat """
                     echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
                     """
                     // Отправляем образ в репозиторий
-                    sh "docker push ${DOCKERHUB_REPO}:latest"
+                    bat "docker push ${DOCKERHUB_REPO}:latest"
                 }
             }
         }
@@ -55,7 +55,7 @@ pipeline {
                 echo 'Деплоим образ на удалённом сервере...'
                 sshagent (credentials: [REMOTE_SSH_CREDENTIALS]) {
                     script {
-                        sh """
+                        bat """
                         ssh -o StrictHostKeyChecking=no deployuser@${REMOTE_SERVER} 'docker stop my-go-service || true && docker rm my-go-service || true'
                         ssh -o StrictHostKeyChecking=no deployuser@${REMOTE_SERVER} 'docker pull ${DOCKERHUB_REPO}:latest'
                         ssh -o StrictHostKeyChecking=no deployuser@${REMOTE_SERVER} 'docker run -d --name my-go-service -p 8080:8080 ${DOCKERHUB_REPO}:latest'
@@ -71,7 +71,7 @@ pipeline {
                     // Ждем несколько секунд, чтобы контейнер успел запуститься
                     sleep time: 10, unit: 'SECONDS'
                     // Выполняем тестовый запрос к сервису на удалённом сервере
-                    sh "curl --fail http://${REMOTE_SERVER}:8080/health"
+                    bat "curl --fail http://${REMOTE_SERVER}:8080/health"
                 }
             }
         }
