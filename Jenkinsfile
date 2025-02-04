@@ -23,7 +23,7 @@ pipeline {
         stage('Deploy on Remote Server') {
             steps {
                 // Блок sshagent использует заранее настроенные SSH-учётные данные в Jenkins.
-                sshagent (credentials: ['remote-ssh-credentials']) {
+                sshagent (credentials: ['test_ssh']) {
                     script {
                         // Формируем команду, которая будет выполнена на удалённом сервере.
                         // Команда проверяет: если директория существует, то обновляет код, иначе — клонирует репозиторий.
