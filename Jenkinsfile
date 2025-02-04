@@ -28,7 +28,7 @@ pipeline {
                         // Формируем команду, которая будет выполнена на удалённом сервере.
                         // Команда проверяет: если директория существует, то обновляет код, иначе — клонирует репозиторий.
                         // Затем переходит в директорию, строит Docker-образ, останавливает старый контейнер (если есть) и запускает новый.
-                        def remoteCmd = "if [ -d '/home/username/deploy/myapp' ]; then cd /home/username/deploy/myapp && git pull; else git clone https://github.com/Antonshepitko/go.git /home/username/deploy/myapp; fi; cd /home/username/deploy/myapp && docker build -t barongeddon/go:latest . && docker stop my-go-service || true && docker rm my-go-service || true && docker run -d --name my-go-service -p 8080:8080 barongeddon/go:latest"
+                        def remoteCmd = "if [ -d '/home/deployuser/deploy/myapp' ]; then cd /home/deployuser/deploy/myapp && git pull; else git clone https://github.com/Antonshepitko/go.git /home/deployuser/deploy/myapp; fi; cd /home/deployuser/deploy/myapp && docker build -t barongeddon/go:latest . && docker stop my-go-service || true && docker rm my-go-service || true && docker run -d --name my-go-service -p 8080:8080 barongeddon/go:latest"
                         remoteCmd = remoteCmd.trim()
                         // Поскольку наш Jenkins работает на Windows, для выполнения SSH-команды используем bat.
                         // В этом случае команда ssh должна быть доступна в PATH (например, из Git for Windows).
