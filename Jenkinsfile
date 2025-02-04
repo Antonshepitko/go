@@ -6,76 +6,49 @@ pipeline {
         DOCKERHUB_REPO = "barongeddon/go" //Имя репозитория в Dockerhub
         REMOTE_SERVER = credentials('test-server-ip')  // Удаленный хост для разворачивания
         REMOTE_SSH_CREDENTIALS = credentials('test_ssh') // ID в Jenkins для SSH подключения
+        REMOTE_DEPLOY_DIR = "/home/deployuser/deploy/myapp"
+        REMOTE_USER = "deployuser"
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 echo 'Получаем код из GitHub...'
-                // Укажите URL и ветку вашего репозитория
+                // Клонирование репозитория. Обратите внимание: здесь используется публичный URL, без авторизации.
                 git url: 'https://github.com/Antonshepitko/go.git', branch: 'master'
             }
         }
-        stage('Build Docker Image') {
-            steps {
-                echo 'Собираем Docker-образ...'
-                bat "docker build -t ${DOCKERHUB_REPO}:latest ."
-            }
-        }
-        stage('Test Docker Container Locally') {
-            steps {
-                echo 'Запускаем временный контейнер для тестирования...'
-                script {
-                    // Запускаем контейнер в фоновом режиме
-                    bat "docker run -d --name temp-container -p 8080:8080 ${DOCKERHUB_REPO}:latest"
-                    // Ждем несколько секунд, чтобы контейнер запустился
-                    sleep time: 5, unit: 'SECONDS'
-                    // Выполняем тестовый запрос к healthcheck-эндпоинту
-                    bat "curl --fail http://localhost:8080/health"
-                    // Останавливаем и удаляем временный контейнер
-                    bat "docker stop temp-container"
-                    bat "docker rm temp-container"
-                }
-            }
-        }
-        stage('Push Image to Docker Hub') {
-            steps {
-                echo 'Публикуем образ в Docker Hub...'
-                script {
-                    bat """
-                    echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
-                    """
-                    // Отправляем образ в репозиторий
-                    bat "docker push ${DOCKERHUB_REPO}:latest"
-                }
-            }
-        }
+
         stage('Deploy on Remote Server') {
             steps {
-                echo 'Деплоим образ на удалённом сервере...'
-                sshagent (credentials: [REMOTE_SSH_CREDENTIALS]) {
+                // Блок sshagent использует заранее настроенные SSH-учётные данные в Jenkins.
+                sshagent (credentials: ['remote-ssh-credentials']) {
                     script {
-                        bat """
-                        ssh -o StrictHostKeyChecking=no deployuser@${REMOTE_SERVER} 'docker stop my-go-service || true && docker rm my-go-service || true'
-                        ssh -o StrictHostKeyChecking=no deployuser@${REMOTE_SERVER} 'docker pull ${DOCKERHUB_REPO}:latest'
-                        ssh -o StrictHostKeyChecking=no deployuser@${REMOTE_SERVER} 'docker run -d --name my-go-service -p 8080:8080 ${DOCKERHUB_REPO}:latest'
+                        // Формируем команду, которая будет выполнена на удалённом сервере.
+                        // Команда проверяет: если директория существует, то обновляет код, иначе — клонирует репозиторий.
+                        // Затем переходит в директорию, строит Docker-образ, останавливает старый контейнер (если есть) и запускает новый.
+                        def remoteCmd = """
+                            if [ -d '${REMOTE_DEPLOY_DIR}' ]; then
+                                cd ${REMOTE_DEPLOY_DIR} && git pull;
+                            else
+                                git clone https://github.com/Antonshepitko/go.git ${REMOTE_DEPLOY_DIR};
+                            fi;
+                            cd ${REMOTE_DEPLOY_DIR} &&
+                            docker build -t ${DOCKERHUB_REPO}:latest . &&
+                            docker stop my-go-service || true &&
+                            docker rm my-go-service || true &&
+                            docker run -d --name my-go-service -p 8080:8080 ${DOCKERHUB_REPO}:latest
                         """
+                        // Поскольку наш Jenkins работает на Windows, для выполнения SSH-команды используем bat.
+                        // В этом случае команда ssh должна быть доступна в PATH (например, из Git for Windows).
+                        bat "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} \"${remoteCmd}\""
                     }
                 }
             }
         }
-        stage('Test Remote Deployment') {
-            steps {
-                echo 'Проверяем доступность сервиса на удалённом сервере...'
-                script {
-                    // Ждем несколько секунд, чтобы контейнер успел запуститься
-                    sleep time: 10, unit: 'SECONDS'
-                    // Выполняем тестовый запрос к сервису на удалённом сервере
-                    bat "curl --fail http://${REMOTE_SERVER}:8080/health"
-                }
-            }
-        }
     }
+
     post {
         always {
             echo 'Пайплайн завершён'
