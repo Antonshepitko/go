@@ -23,7 +23,7 @@ pipeline {
         stage('Deploy on Remote Server') {
             steps {
                 // Блок sshagent использует заранее настроенные SSH-учётные данные в Jenkins.
-                sshagent (credentials: ['test_ssh']) {
+                sshagent (REMOTE_SSH_CREDENTIALS) {
                     script {
                         // Формируем команду, которая будет выполнена на удалённом сервере.
                         // Команда проверяет: если директория существует, то обновляет код, иначе — клонирует репозиторий.
@@ -32,7 +32,7 @@ pipeline {
                         remoteCmd = remoteCmd.trim()
                         // Поскольку наш Jenkins работает на Windows, для выполнения SSH-команды используем bat.
                         // В этом случае команда ssh должна быть доступна в PATH (например, из Git for Windows).
-                        bat "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} \"${remoteCmd}\""
+                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} \"${remoteCmd}\""
                     }
                 }
             }
