@@ -25,6 +25,7 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
 
         stage('Checkout') {
             steps {
+                echo "${DOCKERHUB_CREDENTIALS_USR}"
                 echo "Клонируем репозиторий: ${params.GIT_REPO}"
                 // Клонируем выбранный репозиторий. Здесь используется публичный URL.
                 git url: "${params.GIT_REPO}", branch: 'master'
