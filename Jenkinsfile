@@ -32,7 +32,7 @@ pipeline {
                         remoteCmd = remoteCmd.trim()
                         // Поскольку наш Jenkins работает на Windows, для выполнения SSH-команды используем bat.
                         // В этом случае команда ssh должна быть доступна в PATH (например, из Git for Windows).
-                        bat "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} \"${remoteCmd}\""
+                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} \"${remoteCmd}\""
                     }
                 }
             }
