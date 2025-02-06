@@ -103,7 +103,7 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
                     // Ждём несколько секунд, чтобы контейнер успел запуститься.
                     sh "sleep 10"
                     // Выполняем тестовый запрос к сервису на удалённом сервере через SSH.
-                    sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} 'curl --fail http://localhost:8080/health'"
+                    sh "'curl --fail http://147.45.60.20:8080/health'"
                 }
             }
         }
