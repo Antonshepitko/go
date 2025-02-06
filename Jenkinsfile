@@ -1,39 +1,107 @@
 pipeline {
     agent any
 
+    // Параметры сборки: имя сервиса, выбор репозитория, тег Docker-образа
+    parameters {
+        string(name: 'SERVICE_NAME', defaultValue: 'my-go-service', description: 'Имя сервиса, который будет развёрнут')
+        choice(name: 'GIT_REPO', choices: '''https://github.com/Antonshepitko/go.git
+https://github.com/Antonshepitko/another.git''', description: 'Выберите репозиторий для сборки')
+        string(name: 'DOCKER_IMAGE_TAG', defaultValue: 'latest', description: 'Тег Docker-образа')
+    }
+
+    // Переменные окружения. Здесь вы задаёте базовое имя репозитория в Docker Hub,
+    // формируете полное имя образа, а также пути и данные для удалённого деплоя.
     environment {
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub') // ID в Jenkins для Docker Hub
-        DOCKERHUB_REPO = "barongeddon/go" //Имя репозитория в Dockerhub
-        REMOTE_SERVER = credentials('test-server-ip')  // Удаленный хост для разворачивания
-        REMOTE_SSH_CREDENTIALS = credentials('test_ssh') // ID в Jenkins для SSH подключения
-        REMOTE_DEPLOY_DIR = "/home/deployuser/deploy/myapp"
+        DOCKERHUB_REPO = "barongeddon"
+        FULL_DOCKER_IMAGE = "${DOCKERHUB_REPO}/${params.SERVICE_NAME}:${params.DOCKER_IMAGE_TAG}"
+        REMOTE_DEPLOY_DIR = "/home/deployuser/deploy/${params.SERVICE_NAME}"
         REMOTE_USER = "deployuser"
+
+        REMOTE_SERVER = credentials('test-server-ip')
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Получаем код из GitHub...'
-                // Клонирование репозитория. Обратите внимание: здесь используется публичный URL, без авторизации.
-                git url: 'https://github.com/Antonshepitko/go.git', branch: 'master'
+                echo "Клонируем репозиторий: ${params.GIT_REPO}"
+                // Клонируем выбранный репозиторий. Здесь используется публичный URL.
+                git url: "${params.GIT_REPO}", branch: 'master'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo "Собираем Docker-образ: ${env.FULL_DOCKER_IMAGE}"
+                // Выполняем сборку Docker-образа. Dockerfile должен быть в корне репозитория.
+                sh "docker build -t ${env.FULL_DOCKER_IMAGE} ."
+            }
+        }
+
+        stage('Test Docker Container Locally') {
+            steps {
+                script {
+                    echo "Запускаем временный контейнер для тестирования..."
+                    // Запускаем контейнер локально, пробрасывая порт 8081 на 8080 внутри контейнера
+                    sh "docker run -d --name temp_${params.SERVICE_NAME} -p 8081:8080 ${env.FULL_DOCKER_IMAGE}"
+                    // Ждём несколько секунд для старта
+                    sh "sleep 10"
+                    // Тестируем эндпоинт /health. Если приложение отвечает, тест считается успешным.
+                    sh "curl --fail http://localhost:8081/health"
+                    // Останавливаем и удаляем тестовый контейнер
+                    sh "docker stop temp_${params.SERVICE_NAME}"
+                    sh "docker rm temp_${params.SERVICE_NAME}"
+                }
+            }
+        }
+
+        stage('Push Image to Docker Hub') {
+            steps {
+                script {
+                    echo "Публикуем Docker-образ ${env.FULL_DOCKER_IMAGE} в Docker Hub..."
+                    // Логинимся в Docker Hub. Учётные данные должны быть настроены в Jenkins с ID "dockerhub".
+                    sh """
+                      docker login -u ${DOCKERHUB_CREDENTIALS_USR} -p ${DOCKERHUB_CREDENTIALS_PSW}
+                      docker push ${env.FULL_DOCKER_IMAGE}
+                    """
+                }
             }
         }
 
         stage('Deploy on Remote Server') {
             steps {
-                // Блок sshagent использует заранее настроенные SSH-учётные данные в Jenkins.
+                // Используем sshagent с учётными данными SSH (ID "test_ssh"), чтобы подключиться к удалённому серверу.
                 sshagent (credentials: ['test_ssh']) {
                     script {
-                        // Формируем команду, которая будет выполнена на удалённом сервере.
-                        // Команда проверяет: если директория существует, то обновляет код, иначе — клонирует репозиторий.
-                        // Затем переходит в директорию, строит Docker-образ, останавливает старый контейнер (если есть) и запускает новый.
-                        def remoteCmd = "rm -rf /home/deployuser/deploy/myapp; git clone https://github.com/Antonshepitko/go.git /home/deployuser/deploy/myapp; cd /home/deployuser/deploy/myapp && docker build -t barongeddon/go:latest . && docker stop my-go-service || true && docker rm my-go-service || true && docker run -d --name my-go-service -p 8080:8080 barongeddon/go:latest"
-                        remoteCmd = remoteCmd.trim()
-                        // Поскольку наш Jenkins работает на Windows, для выполнения SSH-команды используем bat.
-                        // В этом случае команда ssh должна быть доступна в PATH (например, из Git for Windows).
-                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} \"${remoteCmd}\""
+                        // Формируем команду для удалённого сервера.
+                        // Команда делает следующее:
+                        // - Удаляет старую директорию (если есть) и клонирует свежий репозиторий.
+                        // - Переходит в каталог и собирает Docker-образ (необязательно, если образ уже запушен в Docker Hub).
+                        // - На самом деле, мы будем брать образ из Docker Hub.
+                        // - Останавливает и удаляет старый контейнер, если он запущен.
+                        // - Запускает новый контейнер с пробросом порта 8080.
+                        def remoteCmd = """
+                          docker pull ${env.FULL_DOCKER_IMAGE} &&
+                          docker stop ${params.SERVICE_NAME} || true &&
+                          docker rm ${params.SERVICE_NAME} || true &&
+                          docker run -d --name ${params.SERVICE_NAME} -p 8080:8080 ${env.FULL_DOCKER_IMAGE}
+                        """
+                        echo "Разворачиваем на удалённом сервере командой: ${remoteCmd}"
+                        // Выполняем команду по SSH на удалённом сервере.
+                        sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} '${remoteCmd}'"
                     }
+                }
+            }
+        }
+
+        stage('Test Remote Deployment') {
+            steps {
+                script {
+                    echo "Проверяем доступность сервиса на удалённом сервере..."
+                    // Ждём несколько секунд, чтобы контейнер успел запуститься.
+                    sh "sleep 10"
+                    // Выполняем тестовый запрос к сервису на удалённом сервере через SSH.
+                    sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} 'curl --fail http://localhost:8080/health'"
                 }
             }
         }
