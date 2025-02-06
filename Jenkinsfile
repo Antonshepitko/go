@@ -12,6 +12,7 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
     // Переменные окружения. Здесь вы задаёте базовое имя репозитория в Docker Hub,
     // формируете полное имя образа, а также пути и данные для удалённого деплоя.
     environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub')
         DOCKERHUB_REPO = "barongeddon"
         FULL_DOCKER_IMAGE = "${DOCKERHUB_REPO}/${params.SERVICE_NAME}:${params.DOCKER_IMAGE_TAG}"
         REMOTE_DEPLOY_DIR = "/home/deployuser/deploy/${params.SERVICE_NAME}"
