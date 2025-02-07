@@ -89,6 +89,7 @@ pipeline {
                         echo "Разворачиваем на удалённом сервере командой: ${remoteCmd}"
                         // Выполняем команду по SSH на удалённом сервере.
                         sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} '${remoteCmd}'"
+                        sh "exit"
                     }
                 }
             }
