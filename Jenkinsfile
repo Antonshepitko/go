@@ -1,41 +1,42 @@
 pipeline {
     agent any
 
-    // Параметры сборки: имя сервиса, выбор репозитория, тег Docker-образа
-    parameters {
-        string(name: 'SERVICE_NAME', defaultValue: 'my-go-service', description: 'Имя сервиса, который будет развёрнут')
-        choice(name: 'GIT_REPO', choices: '''https://github.com/Antonshepitko/go.git
-https://github.com/Antonshepitko/another.git''', description: 'Выберите репозиторий для сборки')
-        string(name: 'DOCKER_IMAGE_TAG', defaultValue: 'latest', description: 'Тег Docker-образа')
-    }
-
-    // Переменные окружения. Здесь вы задаёте базовое имя репозитория в Docker Hub,
-    // формируете полное имя образа, а также пути и данные для удалённого деплоя.
     environment {
+        // Учётные данные для Docker Hub (тип "Username with password")
         DOCKERHUB_CREDENTIALS = credentials('dockerhub')
+        // Базовое имя репозитория Docker Hub (например, имя вашей учётной записи)
         DOCKERHUB_REPO = "barongeddon"
-        FULL_DOCKER_IMAGE = "${DOCKERHUB_REPO}/${params.SERVICE_NAME}:${params.DOCKER_IMAGE_TAG}"
-        REMOTE_DEPLOY_DIR = "/home/deployuser/deploy/${params.SERVICE_NAME}"
+        // Имя сервиса, который будет развёрнут (жёстко задано)
+        SERVICE_NAME = "my-go-service"
+        // URL Git-репозитория для данного сервиса
+        GIT_REPO = "https://github.com/Antonshepitko/go.git"
+        // Тег Docker-образа
+        DOCKER_IMAGE_TAG = "latest"
+        // Полное имя Docker-образа, которое будет собираться и пушиться
+        FULL_DOCKER_IMAGE = "${DOCKERHUB_REPO}/${SERVICE_NAME}:${DOCKER_IMAGE_TAG}"
+        // Путь на удалённом сервере, куда будет развёрнут сервис
+        REMOTE_DEPLOY_DIR = "/home/deployuser/deploy/${SERVICE_NAME}"
+        // Имя пользователя для SSH-подключения к удалённому серверу
         REMOTE_USER = "deployuser"
-
-        REMOTE_SERVER = credentials('test-server-ip')
+        // Удалённый сервер (если это секрет, то используйте тип Secret text; здесь предполагается, что значение – IP или доменное имя)
+        REMOTE_SERVER = "192.168.1.100"
     }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo "Клонируем репозиторий: ${params.GIT_REPO}"
-                // Клонируем выбранный репозиторий. Здесь используется публичный URL.
-                git url: "${params.GIT_REPO}", branch: 'master'
+                echo "Клонируем репозиторий: ${GIT_REPO}"
+                // Клонирование репозитория из GitHub (ветка master)
+                git url: "${GIT_REPO}", branch: "master"
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo "Собираем Docker-образ: ${env.FULL_DOCKER_IMAGE}"
-                // Выполняем сборку Docker-образа. Dockerfile должен быть в корне репозитория.
-                sh "docker build -t ${env.FULL_DOCKER_IMAGE} ."
+                echo "Собираем Docker-образ: ${FULL_DOCKER_IMAGE}"
+                // Сборка Docker-образа (Dockerfile должен находиться в корне репозитория)
+                sh "docker build -t ${FULL_DOCKER_IMAGE} ."
             }
         }
 
@@ -43,15 +44,15 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
             steps {
                 script {
                     echo "Запускаем временный контейнер для тестирования..."
-                    // Запускаем контейнер локально, пробрасывая порт 8081 на 8080 внутри контейнера
-                    sh "docker run -d --name temp_${params.SERVICE_NAME} -p 8081:8080 ${env.FULL_DOCKER_IMAGE}"
-                    // Ждём несколько секунд для старта
+                    // Запускаем контейнер с пробросом порта 8081 (локально, внутри контейнера порт 8080)
+                    sh "docker run -d --name temp_${SERVICE_NAME} -p 8081:8080 ${FULL_DOCKER_IMAGE}"
+                    // Ждём несколько секунд, чтобы контейнер успел подняться
                     sh "sleep 10"
-                    // Тестируем эндпоинт /health. Если приложение отвечает, тест считается успешным.
+                    // Тестируем эндпоинт /health (ожидаем, что приложение вернёт, например, "ok")
                     sh "curl --fail http://localhost:8081/health"
                     // Останавливаем и удаляем тестовый контейнер
-                    sh "docker stop temp_${params.SERVICE_NAME}"
-                    sh "docker rm temp_${params.SERVICE_NAME}"
+                    sh "docker stop temp_${SERVICE_NAME}"
+                    sh "docker rm temp_${SERVICE_NAME}"
                 }
             }
         }
@@ -59,11 +60,13 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
         stage('Push Image to Docker Hub') {
             steps {
                 script {
-                    echo "Публикуем Docker-образ ${env.FULL_DOCKER_IMAGE} в Docker Hub..."
-                    // Логинимся в Docker Hub. Учётные данные должны быть настроены в Jenkins с ID "dockerhub".
+                    echo "Публикуем Docker-образ ${FULL_DOCKER_IMAGE} в Docker Hub..."
+                    // Логинимся в Docker Hub и пушим образ.
+                    // Учётные данные из DOCKERHUB_CREDENTIALS автоматически создают переменные:
+                    // DOCKERHUB_CREDENTIALS_USR и DOCKERHUB_CREDENTIALS_PSW
                     sh """
-                      docker login -u ${DOCKERHUB_CREDENTIALS_USR} -p ${DOCKERHUB_CREDENTIALS_PSW}
-                      docker push ${env.FULL_DOCKER_IMAGE}
+                        docker login -u ${DOCKERHUB_CREDENTIALS_USR} -p ${DOCKERHUB_CREDENTIALS_PSW}
+                        docker push ${FULL_DOCKER_IMAGE}
                     """
                 }
             }
@@ -71,21 +74,17 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
 
         stage('Deploy on Remote Server') {
             steps {
-                // Используем sshagent с учётными данными SSH (ID "test_ssh"), чтобы подключиться к удалённому серверу.
+                // Используем sshagent с учётными данными SSH (ID "test_ssh") для подключения к удалённому серверу
                 sshagent (credentials: ['test_ssh']) {
                     script {
-                        // Формируем команду для удалённого сервера.
-                        // Команда делает следующее:
-                        // - Удаляет старую директорию (если есть) и клонирует свежий репозиторий.
-                        // - Переходит в каталог и собирает Docker-образ (необязательно, если образ уже запушен в Docker Hub).
-                        // - На самом деле, мы будем брать образ из Docker Hub.
-                        // - Останавливает и удаляет старый контейнер, если он запущен.
-                        // - Запускает новый контейнер с пробросом порта 8080.
+                        // Формируем команду для удалённого сервера:
+                        // Здесь мы делаем pull образа из Docker Hub, останавливаем и удаляем старый контейнер (если есть)
+                        // и запускаем новый контейнер с пробросом порта 8080.
                         def remoteCmd = """
-                          docker pull ${env.FULL_DOCKER_IMAGE} &&
-                          docker stop ${params.SERVICE_NAME} || true &&
-                          docker rm ${params.SERVICE_NAME} || true &&
-                          docker run -d --name ${params.SERVICE_NAME} -p 8080:8080 ${env.FULL_DOCKER_IMAGE}
+                            docker pull ${FULL_DOCKER_IMAGE} &&
+                            docker stop ${SERVICE_NAME} || true &&
+                            docker rm ${SERVICE_NAME} || true &&
+                            docker run -d --name ${SERVICE_NAME} -p 8080:8080 ${FULL_DOCKER_IMAGE}
                         """
                         echo "Разворачиваем на удалённом сервере командой: ${remoteCmd}"
                         // Выполняем команду по SSH на удалённом сервере.
@@ -99,10 +98,10 @@ https://github.com/Antonshepitko/another.git''', description: 'Выберите 
             steps {
                 script {
                     echo "Проверяем доступность сервиса на удалённом сервере..."
-                    // Ждём несколько секунд, чтобы контейнер успел запуститься.
+                    // Ждём, чтобы контейнер успел запуститься
                     sh "sleep 10"
-                    // Выполняем тестовый запрос к сервису на удалённом сервере через SSH.
-                    sh "curl --fail http://147.45.60.20:8080/health"
+                    // Тестируем эндпоинт /health через SSH (запрос к localhost на удалённом сервере)
+                    sh "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_SERVER} 'curl --fail http://localhost:8080/health'"
                 }
             }
         }
