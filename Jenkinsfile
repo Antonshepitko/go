@@ -19,7 +19,7 @@ pipeline {
         // Имя пользователя для SSH-подключения к удалённому серверу
         REMOTE_USER = "deployuser"
         // Удалённый сервер (если это секрет, то используйте тип Secret text; здесь предполагается, что значение – IP или доменное имя)
-        REMOTE_SERVER = "192.168.1.100"
+        REMOTE_SERVER = credentials('test-server-ip')
     }
 
     stages {
