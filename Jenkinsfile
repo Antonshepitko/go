@@ -101,7 +101,7 @@ pipeline {
                     // Ждём, чтобы контейнер успел запуститься
                     sh "sleep 10"
                     // Тестируем эндпоинт /health через SSH (запрос к localhost на удалённом сервере)
-                    sh "'curl --fail ${REMOTE_SERVER}/health'"
+                    sh "'curl --fail http://${REMOTE_SERVER}:8080/health'"
                 }
             }
         }
