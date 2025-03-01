@@ -1,17 +1,10 @@
-# Этап сборки: используем официальный образ Golang для компиляции приложения
-FROM golang:1.23 AS builder
+FROM golang:1.22 AS builder
 WORKDIR /app
-# Копируем все файлы из текущей директории в контейнер
 COPY . .
-# Собираем бинарный файл приложения статически (результат будет называться "service")
-RUN CGO_ENABLED=0 go build -o service .
+RUN go build -o health-service main.go
 
-# Этап выполнения: минимальный образ для запуска приложения
 FROM alpine:latest
 WORKDIR /app
-# Копируем скомпилированное приложение из предыдущего этапа
-COPY --from=builder /app/service .
-# Открываем порт 8080 для доступа к сервису
+COPY --from=builder /app/health-service .
 EXPOSE 8080
-# Команда для запуска приложения
-CMD ["./service"]
+CMD ["./health-service"]
