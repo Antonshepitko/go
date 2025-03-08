@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
-        DOCKER_IMAGE = "antonshepitko/health-service"
+        DOCKER_IMAGE = "antonshepitko/health-service" // Укажи свой Docker Hub логин
         KUBE_CONFIG = credentials('kube-config')
     }
     stages {
